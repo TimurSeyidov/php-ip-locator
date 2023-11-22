@@ -6,3 +6,9 @@ services:
     image: php:8.2-cli-alpine
     volumes:
       - ./src:/app
+  composer:
+    container_name: composer
+    hostname: composer
+    image: composer
+    volumes:
+      - ./src:/app
