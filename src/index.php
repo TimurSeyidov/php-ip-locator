@@ -384,7 +384,7 @@
         }
     }
 
-$ip = new Ip('77.79.133.234');
+$ip = new Ip('8.8.8.8');
 $service = new ChainLocator(
     new FileGetRequester(
         new FileCache(__DIR__ . '/cache', 'filegeo_local')
