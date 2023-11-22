@@ -3,6 +3,6 @@ services:
   php-cli:
     container_name: php-cli
     hostname: php-cli
-    image: php:8.3-cli-alpine
+    image: php:8.2-cli-alpine
     volumes:
       - ./src:/app
