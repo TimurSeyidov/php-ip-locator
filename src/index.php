@@ -189,7 +189,7 @@
     }
 
     interface Requester {
-        public function request(string $url): array | null;
+        public function request(string $url, bool $as_plain = false): array | string | null;
     }
 
     abstract class ARequester implements Requester {
@@ -211,14 +211,16 @@
     }
 
     final class FileGetRequester extends ARequester implements Requester {
-        public function request(string $url): array|null
+        public function request(string $url, $as_plain = false): array|string|null
         {
             $cache = $this->fromCache($url);
             if ($cache)
                 return $cache;
             try {
                 $json = file_get_contents($url);
-                $json = json_decode($json, true);
+                if (!$as_plain) {
+                    $json = json_decode($json, true);
+                }
                 if (!empty($json))
                     $this->toCache($url, $json);
                 return $json;
@@ -262,7 +264,7 @@
         }
     }
     final class GuzzleRequester extends ARequester implements Requester {
-        public function request(string $url): array|null
+        public function request(string $url, $as_plain = false): array|string|null
         {
             $cache = $this->fromCache($url);
             if ($cache)
@@ -279,10 +281,10 @@
             }
             if ($request->getStatusCode() !== 200)
                 return null;
-            $cache = json_decode(
-                $request->getBody()->getContents(),
-                true
-            );
+            $cache = $request->getBody()->getContents();
+            if (!$as_plain) {
+                $cache = json_decode($cache, true);
+            }
             if (!empty($cache))
                 $this->toCache($url, $cache);
             return $cache;
@@ -384,13 +386,76 @@
         }
     }
 
-$ip = new Ip('8.8.8.8');
+    final class ApiIpSbService extends LocatorService implements Locator {
+        public function locate(Ip $ip): Location|null
+        {
+            $url = 'https://api.ip.sb/geoip/' . $ip->getIp();
+            $json = $this->requester->request($url);
+            if (!$json)
+                return null;
+            $point = new Point(
+                $json['latitude'],
+                $json['longitude'],
+            );
+            return new Location(
+                $ip,
+                $json['country'] ?? '',
+                $json['city'] ?? '',
+                $json['postal_code'] ?? '',
+                $point
+            );
+        }
+    }
+
+    final class ApiHackerTargetService extends LocatorService implements Locator {
+    public function locate(Ip $ip): Location|null
+    {
+        $url = 'https://api.hackertarget.com/ipgeo/?q=' . $ip->getIp();
+        $text= $this->requester->request($url, true);
+        $json = [];
+        foreach (explode(PHP_EOL, $text) as $line) {
+            $data = explode(': ', $line);
+            $fname = trim($data[0]);
+            $fvalue = trim($data[1]);
+            if (preg_match('/country/i', $fname)) {
+                $json['country'] = $fvalue;
+            }
+            if (preg_match('/city/i', $fname)) {
+                $json['city'] = $fvalue;
+            }
+            if (preg_match('/latitude/i', $fname)) {
+                $json['latitude'] = $fvalue;
+            }
+            if (preg_match('/latitude/i', $fname)) {
+                $json['longitude'] = $fvalue;
+            }
+        }
+        if (empty($json))
+            return null;
+
+        $point = new Point(
+            $json['latitude'],
+            $json['longitude'],
+        );
+        return new Location(
+            $ip,
+            $json['country'] ?? '',
+            $json['city'] ?? '',
+            '',
+            $point
+        );
+    }
+}
+
+$ip = new Ip('77.79.133.234');
 $service = new ChainLocator(
     new FileGetRequester(
         new FileCache(__DIR__ . '/cache', 'filegeo_local')
     ),
 );
 
+$service->addService(ApiHackerTargetService::class);
+$service->addService(ApiIpSbService::class);
 $service->addService(IpApiComService::class);
 $service->addService(ReallyFreeGeoIpService::class);
 $service->addService(FreeIpApiService::class);
